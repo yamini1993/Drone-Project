@@ -1,0 +1,313 @@
+Servo myservo1;  // create servo object to control a servo
+Servo myservo2;  // create servo object to control a servo
+
+int rssi1 = A0;
+int rssi2 = A1;
+#define SPKR 9
+
+
+int rssiTrack = 0;
+int rssiFix = 0;
+int durchgang = 0;
+int rssiTrackOld = 0;
+int rssiDiv = 0;
+int i=0;
+int y=0;
+char richtung;
+char Vert_richtung;
+
+
+LiquidCrystal lcd(7, 6, 5, 4, 3, 2);
+
+void setup()
+{
+    lcd.begin(16, 2);
+    myservo1.attach(10);  // attaches the servo on pin 10 to the servo object
+    myservo1.write(Vert_mitte);
+    myservo2.attach(11);  // attaches the servo on pin 11 to the servo object
+    myservo2.write(Hori_mitte);
+    y=Hori_mitte;
+    
+    Serial.begin(9600);
+    lcd.setCursor(0, 0);
+    lcd.print("michael-heck.net");
+    lcd.setCursor(0, 1);
+    lcd.print("calibrating...");
+    
+    for(i=0;i<10;i++) 
+    {
+    calibrate1=calibrate1+analogRead(rssi1);
+    delay(25);
+    }
+    calibrate1=calibrate1/10;
+
+    for(i=0;i<10;i++) 
+    {
+      calibrate2=calibrate2+analogRead(rssi2);
+      delay(25);
+    }
+    calibrate2=calibrate2/10;
+    
+    pinMode(SPKR, OUTPUT); //set the speaker as output
+    digitalWrite(SPKR, HIGH);
+    delay(500);
+    digitalWrite(SPKR, LOW);
+    delay(2500);
+}
+
+void loop()
+{
+    
+// Map values to defined range
+    rssiTrack = map(analogRead(rssi1), 0, calibrate1, 0, 100);
+    //rssiTrack = analogRead(rssi1);
+    rssiFix = map(analogRead(rssi2), 0, calibrate2, 0, 100);
+    //rssiFix =analogRead(rssi2);
+    
+    if (rssiTrack>100)
+    {
+      rssiTrack = 100;
+    }
+    if (rssiFix>100)
+    {
+      rssiFix = 100;
+    }
+    
+//Info to searial port
+    Serial.println(rssiTrack);
+    Serial.println(rssiFix);
+    Serial.println(" ");
+    
+//Display rssi values
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print(rssiTrack);
+    lcd.setCursor(0, 1);
+    lcd.print(rssiFix);
+    
+    if(rssiTrack <= schwellwert)
+    {
+        trackHorizontal();
+    }
+    eject:
+    delay(wartezeit);
+}
+
+void trackHorizontal()
+{    
+   i=Hori_mitte;
+    do
+    {
+        rssiTrackOld = rssiTrack;
+    rssiTrack = map(analogRead(rssi1), 0, calibrate1, 0, 100);
+    //rssiTrack = analogRead(rssi1);
+    rssiFix = map(analogRead(rssi2), 0, calibrate2, 0, 100);
+    //rssiFix =analogRead(rssi2);
+    if (rssiTrack>100)
+    {
+      rssiTrack = 100;
+    }
+    if (rssiFix>100)
+    {
+      rssiFix = 100;
+    }
+        
+        rssiDiv = (rssiTrack-rssiTrackOld);
+        if (rssiDiv <= 0)
+        {
+          rssiDiv = rssiDiv * -1;
+        }
+        
+        if (((rssiTrack+rssiFix) / 2) <= 50)
+        {
+          digitalWrite(SPKR, HIGH);
+        }
+        else
+        {
+          digitalWrite(SPKR, LOW);
+        }
+        
+        if( rssiDiv <= h_toleranz )
+        {
+            
+            if(rssiTrack <= 45)
+            {
+                myservo1.write(Vert_mitte);
+                if(i >= Hori_mitte)
+                {
+                    i = i - 30;
+                    richtung = 'L';
+                }
+                else
+                {
+                    i = i + 30;
+                    richtung = 'R';
+                }
+            }
+            else
+            {
+                lcd.clear();
+                lcd.setCursor(0, 0);
+                lcd.print(rssiTrack);
+                lcd.setCursor(8, 0);
+                lcd.print(i);
+                lcd.setCursor(0, 1);
+                lcd.print(rssiFix);
+                //lcd.setCursor(3, 1);
+                //lcd.print("Rssi gleich");
+                //lcd.setCursor(15, 1);
+                //lcd.print(rssiDiv);
+                
+                trackVertikal();
+            }
+        }
+        else
+        {
+            if(rssiTrack>rssiTrackOld)
+            {
+                if (richtung == 'L')
+                {
+                    i = i + 10;
+                    richtung = 'L';
+                }
+                else
+                {
+                    i = i - 10;
+                    richtung = 'R';
+                }
+            }
+            else
+            {
+                if (richtung == 'R')
+                {
+                    i = i + 10;
+                    richtung = 'L';
+                }
+                else
+                {
+                    i = i - 10;
+                    richtung = 'R';
+                }
+            }
+            
+            lcd.clear();
+            lcd.setCursor(0, 0);
+            lcd.print(rssiTrack);
+            lcd.setCursor(4, 0);
+            //lcd.print(rssiTrackOld);
+            lcd.setCursor(8, 0);
+            //lcd.print(i);
+            lcd.setCursor(12, 0);
+           // lcd.print(richtung);
+            lcd.setCursor(0, 1);
+            lcd.print(rssiFix);
+            
+        }
+        
+        myservo2.write(i);
+        
+        if (i <= 0 || i >= 180)
+        {
+            lcd.clear();
+            lcd.setCursor(0, 0);
+            lcd.print("Reset");
+            
+            i=Hori_mitte;
+            myservo2.write(Hori_mitte);
+            myservo1.write(Vert_mitte);
+            goto eject;
+        }
+        delay(wartezeit);
+    }
+    while (rssiTrack <= 98);
+    
+    eject:
+    
+    return;
+}
+
+
+void trackVertikal()
+{
+    int loopi;
+    
+//    lcd.clear();
+//    lcd.setCursor(0, 0);
+//    lcd.print("Beginne Track V");
+//    delay(1000);
+    
+    loopi = 0;
+    
+    do
+    {
+    rssiTrackOld = rssiTrack;
+    rssiTrack = map(analogRead(rssi1), 0, calibrate1, 0, 100);
+    //rssiTrack = analogRead(rssi1);
+    rssiFix = map(analogRead(rssi2), 0, calibrate2, 0, 100);
+    //rssiFix =analogRead(rssi2);
+    if (rssiTrack>100)
+    {
+      rssiTrack = 100;
+    }
+    if (rssiFix>100)
+    {
+      rssiFix = 100;
+    }     
+        rssiDiv = (rssiTrack-rssiTrackOld);
+        if (rssiDiv <= 0)
+        {
+            rssiDiv = rssiDiv * -1;
+        }
+        
+        if( rssiDiv <= h_toleranz )
+        {
+            
+            if(rssiTrack <= 45)
+            {
+               y=Vert_mitte;
+               myservo1.write(y);
+               return;               
+            }
+            else
+            {
+                lcd.clear();
+                lcd.setCursor(0, 0);
+                lcd.print(rssiTrack);
+                lcd.setCursor(8, 0);
+                //lcd.print(y);
+                lcd.setCursor(0, 1);
+                lcd.print(rssiFix);
+                lcd.setCursor(3, 1);
+                //lcd.print("Rssi gleich");
+                lcd.setCursor(15, 1);
+                //lcd.print(rssiDiv);
+            }
+        }
+        else
+        {
+            if(rssiTrack>rssiTrackOld)
+            {
+                if (Vert_richtung == 'O')
+                {
+                    y = y - 5;
+                    Vert_richtung = 'O';
+                }
+                else
+                {
+                    y = y + 5;
+                    Vert_richtung = 'U';
+                }
+            }
+            else
+            {
+                if (Vert_richtung == 'U')
+                {
+                    y = y - 5;
+                    Vert_richtung = 'O';
+                }
+                else
+                {
+                    y = y + 5;
+                    Vert_richtung = 'U';
+                }
+            }
